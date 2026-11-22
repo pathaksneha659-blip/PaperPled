@@ -93,6 +93,8 @@ python -m pytest -q
 
 ## Measured Pipeline Results
 
+Final submission Sheet (6 tabs: Startups, Products, Research Papers, Jobs, News, Entity Mapping Log): https://docs.google.com/spreadsheets/d/16Bn0Pj60wshv3YPh7Fdw8E-UjkiUtXfd-gki21dhCjA/edit?usp=sharing — verified accessible in an Incognito window with Anyone-with-link Viewer sharing.
+
 All statistics reflect recorded values in `output/run_stats.json` and local dataset outputs:
 
 ### Dataset Records by Tab
