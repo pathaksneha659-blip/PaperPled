@@ -8,3 +8,6 @@ __pycache__/
 output/
 data/service_account.json
 data/seen.db
+
+credentials/
+service_account.json
