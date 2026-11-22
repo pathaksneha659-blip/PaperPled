@@ -35,10 +35,6 @@ Create a `.env` file in the repository root. Only keys are listed below (never c
 # GitHub API Tokens (comma-separated for rotation)
 GITHUB_TOKENS=
 
-# Google Sheets Export Credentials
-GOOGLE_SERVICE_ACCOUNT_FILE=
-GOOGLE_SHEET_KEY=
-
 # Local Pipeline Configuration
 OUTPUT_DIR=output
 
@@ -86,7 +82,7 @@ python -m src.main news
 # Run cross-source entity resolution against seed organizations
 python -m src.main resolve
 
-# Export formatted records to Google Sheets across specified tabs
+# Export all datasets to output\csv\ as UTF-8 CSV files (startups, products, research_papers, jobs, news, entity_mapping_log).
 python -m src.main export --tabs "Startups,Products,Research Papers,Jobs,News,Entity Mapping Log"
 
 # Execute the test suite
@@ -109,7 +105,7 @@ All statistics reflect recorded values in `output/run_stats.json` and local data
 | **Jobs** (`jobs.jsonl`) | 24 | < 24 hours (`2026-11-21T19:13:50Z`) | N/A |
 | **News** (`news.jsonl`) | 71 | < 24 hours (`2026-11-21T19:13:53Z`) | N/A |
 | **Entity Mapping Log** (`entity_mapping_log.csv`) | 2000 | Cross-vertical run | N/A |
-| **Total Run Duration** | TBD | — | — |
+| **Total Run Duration** | Not measured in this run | — | — |
 
 ### LLM Gateway Provider Statistics
 
@@ -121,7 +117,7 @@ Recorded metrics from the multi-provider resilient fallback orchestrator (`run_s
 | **backup** | 1 | 0 | 0 | 0 | 1 | 0 |
 | **gemini** | 1 | 0 | 0 | 0 | 0 (HTTP 403) | 0 |
 | **groq** | 1 | 0 | 0 | 0 | 1 (HTTP 404 handled) | 1 |
-| **deepseek** | TBD | TBD | TBD | TBD | TBD | TBD |
+| **DeepSeek** | Not configured in this run (Gemini 403; Groq carried the chain) | — | — | — | — | — |
 
 ---
 
