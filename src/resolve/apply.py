@@ -1,11 +1,20 @@
 import csv
 import json
 from collections import Counter
+from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from src.core.run_stats import record as record_stats
 from .resolver import Resolver
+
+
+def write_entity_mapping_log_jsonl(decisions, path):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        for decision in decisions:
+            handle.write(json.dumps(asdict(decision), ensure_ascii=False) + "\n")
 
 
 def main():
@@ -55,6 +64,9 @@ def main():
 
     mapping_path = root / "output" / "entity_mapping_log.csv"
     resolver.export_log(mapping_path)
+    write_entity_mapping_log_jsonl(
+        resolver.log, root / "output" / "entity_mapping_log.jsonl"
+    )
 
     counts = Counter(match.method for match in resolver.log)
     record_stats("resolve.method_counts", **dict(counts))

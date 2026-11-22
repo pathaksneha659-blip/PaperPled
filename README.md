@@ -108,7 +108,7 @@ All statistics reflect recorded values in `output/run_stats.json` and local data
 | **Research Papers** (`research_papers.jsonl`) | 1000 | Last 180 days | N/A |
 | **Jobs** (`jobs.jsonl`) | 24 | < 24 hours (`2026-11-21T19:13:50Z`) | N/A |
 | **News** (`news.jsonl`) | 71 | < 24 hours (`2026-11-21T19:13:53Z`) | N/A |
-| **Entity Mapping Log** (`entity_mapping_log.csv`) | 2001 (inc. header) | Cross-vertical run | N/A |
+| **Entity Mapping Log** (`entity_mapping_log.csv`) | 2000 | Cross-vertical run | N/A |
 | **Total Run Duration** | TBD | — | — |
 
 ### LLM Gateway Provider Statistics
