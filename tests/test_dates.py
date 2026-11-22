@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 import pytest
 
@@ -13,7 +14,7 @@ NOW = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
     "raw",
     ["just now", "now", "2h", "3 hours ago", "5 min ago", "yesterday", "2 days ago"],
 )
-def test_relative_forms(raw):
+def test_relative_forms(raw: Literal['just now'] | Literal['now'] | Literal['2h'] | Literal['3 hours ago'] | Literal['5 min ago'] | Literal['yesterday'] | Literal['2 days ago']): # type: ignore
     assert parse_date(raw, NOW, "visible_text") is not None
 
 
@@ -81,7 +82,7 @@ def test_pick_best_narrowest_at_highest_confidence():
     assert pick_best([broad, exact]) == exact
 
 
-def test_pick_best_conflict_returns_earlier(monkeypatch):
+def test_pick_best_conflict_returns_earlier(monkeypatch: pytest.MonkeyPatch):
     earlier = parse_date("2026-11-18T12:00:00Z", NOW, "api_field")
     later = parse_date("2026-11-21T12:00:00Z", NOW, "api_field")
     import src.core.dates as dates

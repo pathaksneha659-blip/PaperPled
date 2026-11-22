@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import feedparser
-from selectolax.lexbor import LexborHTMLParser
+from html.parser import HTMLParser
 
 from src.config import settings
 from src.core.http import HttpClient
@@ -17,6 +17,15 @@ NEWS_FEED = (
     "q=AI+startup+OR+artificial+intelligence+when%3A1d"
     "&hl=en-US&gl=US&ceid=US:en"
 )
+
+
+class _PlainTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
 
 
 def _entry_date(entry) -> datetime | None:
@@ -36,7 +45,9 @@ def _entry_date(entry) -> datetime | None:
 
 
 def _plain_text(value: str) -> str:
-    return " ".join(LexborHTMLParser(value).text().split())
+    parser = _PlainTextParser()
+    parser.feed(value)
+    return " ".join("".join(parser.parts).split())
 
 
 async def run_news_extractor(

@@ -3,20 +3,51 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 from typing import Iterable
 
 import dateparser
-
-try:
-    from selectolax.lexbor import LexborHTMLParser as HTMLParser
-except ImportError:  # pragma: no cover
-    HTMLParser = None
 
 from src.logging_setup import log
 
 
 UTC = timezone.utc
 MIN_DATE = datetime(1995, 1, 1, tzinfo=UTC)
+
+
+class _DateHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.jsonld = []
+        self.meta = []
+        self.times = []
+        self._jsonld_depth = 0
+        self._jsonld_parts = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag.lower() == "script" and attributes.get("type", "").lower() == "application/ld+json":
+            self._jsonld_depth += 1
+            self._jsonld_parts = []
+        elif tag.lower() == "meta":
+            key = attributes.get("property") or attributes.get("name")
+            if key in (
+                "article:published_time",
+                "og:updated_time",
+            ):
+                self.meta.append((key, attributes.get("content")))
+        elif tag.lower() == "time" and attributes.get("datetime"):
+            self.times.append(attributes["datetime"])
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "script" and self._jsonld_depth:
+            self._jsonld_depth -= 1
+            self.jsonld.append("".join(self._jsonld_parts).strip())
+            self._jsonld_parts = []
+
+    def handle_data(self, data):
+        if self._jsonld_depth:
+            self._jsonld_parts.append(data)
 
 
 @dataclass(frozen=True)
@@ -283,36 +314,28 @@ def page_date_candidates(
     candidates: list[ParsedDate] = []
     if not html:
         html = ""
-    if HTMLParser is not None:
-        parser = HTMLParser(html)
+    parser = _DateHTMLParser()
+    parser.feed(html)
 
-        for script in parser.css('script[type="application/ld+json"]'):
-            try:
-                payload = json.loads(script.text(strip=True))
-            except (json.JSONDecodeError, TypeError):
-                continue
-            for raw in _jsonld_values(payload):
-                parsed = parse_date(raw, fetched_at, "jsonld")
-                if parsed:
-                    candidates.append(parsed)
-
-        for selector, attr in (
-            ('meta[property="article:published_time"]', "content"),
-            ('meta[name="article:published_time"]', "content"),
-            ('meta[property="og:updated_time"]', "content"),
-        ):
-            node = parser.css_first(selector)
-            if node:
-                raw = node.attributes.get(attr)
-                parsed = parse_date(raw, fetched_at, "meta_og")
-                if parsed:
-                    candidates.append(parsed)
-
-        for node in parser.css("time[datetime]"):
-            raw = node.attributes.get("datetime")
-            parsed = parse_date(raw, fetched_at, "time_tag")
+    for raw_jsonld in parser.jsonld:
+        try:
+            payload = json.loads(raw_jsonld)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for raw in _jsonld_values(payload):
+            parsed = parse_date(raw, fetched_at, "jsonld")
             if parsed:
                 candidates.append(parsed)
+
+    for _, raw in parser.meta:
+        parsed = parse_date(raw, fetched_at, "meta_og")
+        if parsed:
+            candidates.append(parsed)
+
+    for raw in parser.times:
+        parsed = parse_date(raw, fetched_at, "time_tag")
+        if parsed:
+            candidates.append(parsed)
 
     match = re.search(r"/(\d{4})/(\d{2})/(\d{2})(?:/|$)", url)
     if match:

@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import aiohttp
-from selectolax.lexbor import LexborHTMLParser
+from html.parser import HTMLParser
 
 from src.config import settings
 from src.core.http import HttpClient
@@ -21,8 +21,19 @@ ASHBY_BOARDS = {
 }
 
 
+class _PlainTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
 def _plain_text(html: str) -> str:
-    return " ".join(LexborHTMLParser(html).text().split())
+    parser = _PlainTextParser()
+    parser.feed(html)
+    return " ".join("".join(parser.parts).split())
 
 
 async def run_jobs_extractor(
