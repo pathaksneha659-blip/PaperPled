@@ -12,8 +12,7 @@ To ingest and process 500,000+ AI market records sustainably, the pipeline avoid
   - **ATS Job Boards**: High-signal hiring velocity is monitored by polling structured Ashby API endpoints (`api.ashbyhq.com/posting-api/job-board/{company}`) across tracked frontier AI labs.
 - **URL Frontier with SKIP LOCKED Leasing (_Designed, not implemented locally_)**:
   - Distributed workers lease batches of discovery tasks from a Postgres-backed queue using `SELECT id FROM frontier_queue WHERE status = 'pending' ORDER BY priority DESC LIMIT 100 FOR UPDATE SKIP LOCKED`.
-  
-  - This guarantees single-worker leasing without lock contention or distributed transaction deadlocks.
+
 - **Stateless Workers**:
   - Extraction nodes operate statelessly without local disk dependencies. Output items are emitted directly into stream queues or idempotent staging tables.
 - **Concurrency and Throttling Control**:
