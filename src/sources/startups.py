@@ -18,18 +18,32 @@ async def run_startups_extractor(http: HttpClient, target_count: int = 1000) -> 
 
     records = []
     now_iso = datetime.now(timezone.utc).isoformat()
+    seen_slugs = set()
 
     for c in companies:
-        tags = {t.lower() for t in (c.get("tags", []) + c.get("industries", []))}
+        raw_tags = c.get("tags") or []
+        raw_industries = c.get("industries") or []
+        tags = {
+            str(tag).strip().lower()
+            for tag in raw_tags + raw_industries
+            if str(tag).strip()
+        }
         is_ai = bool(tags & AI_TAGS) or any("ai" in t for t in tags)
         if not is_ai:
             continue
 
+        name = c.get("name")
+        slug = c.get("slug")
+        if not isinstance(name, str) or not name.strip() or not isinstance(slug, str) or not slug:
+            continue
+        if slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+
         team_size = c.get("team_size")
         emp_count = int(team_size) if team_size and str(team_size).isdigit() else None
 
-        slug = c.get("slug")
-        canonical_url = f"https://www.ycombinator.com/companies/{slug}" if slug else "https://www.ycombinator.com"
+        canonical_url = f"https://www.ycombinator.com/companies/{slug}"
 
         rec = StartupRecord(
             schemaVersion="1.0",
@@ -39,7 +53,7 @@ async def run_startups_extractor(http: HttpClient, target_count: int = 1000) -> 
                 url=canonical_url
             ),
             content=StartupContent(
-                entityName=c.get("name", "Unknown Startup").strip(),
+                entityName=name.strip(),
                 data=StartupData(
                     employeeCount=emp_count,
                     website=c.get("website"),

@@ -1,0 +1,8 @@
+Product: ChatGPT Plus
+Source: OpenAI official website
+
+ChatGPT Plus is available for $20 per month.
+The subscription includes access to advanced AI models,
+expanded messaging, file uploads, and image generation.
+
+Pricing: $20/month

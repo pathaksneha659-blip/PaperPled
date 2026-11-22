@@ -1,0 +1,99 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FrontierAtlas Architecture</title>
+<style>
+@page {
+  size: A4;
+  margin: 1.8cm;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font: 8pt Arial, sans-serif;
+  }
+}
+html { font: 11pt Arial, sans-serif; color: #17202a; }
+body { margin: 0; line-height: 1.25; }
+h1 { font-size: 17pt; margin: 0 0 10pt; }
+h2 { font-size: 14pt; margin: 0 0 8pt; }
+h3 { font-size: 11pt; margin: 8pt 0 4pt; }
+p, ul { margin: 4pt 0; }
+ul { padding-left: 18pt; }
+li { margin: 2pt 0; }
+pre { white-space: pre-wrap; font: 8pt Consolas, monospace; }
+code { font: 9pt Consolas, monospace; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #999; padding: 3pt; }
+.page-break { break-before: page; page-break-before: always; }
+</style>
+</head>
+<body>
+<h1>FrontierAtlas Architecture</h1>
+<h2>Page 1 â€” Scale strategy for 500k+</h2>
+<p><strong>Current implementation:</strong> startup, product, research-paper, job, and news extractors fetch public APIs/feeds through <code>src/core/http.py</code>, then write JSONL files. Jobs and news retain only items published in the prior 24 hours. <code>src/core/fetcher.py</code> provides an opt-in tiered fetcher but is not wired into those source modules. There is no persistent frontier, worker pool, or content-addressed raw archive in the demo.</p>
+<p><strong>Production design (not in demo):</strong></p>
+<pre><code class="language-text">Enumerable source discovery
+       |
+       v
+Postgres frontier (SKIP LOCKED + expiring leases)
+       |
+       +--&gt; stateless fetch/parse workers (scale by replicas)
+       |         |
+       |         +--&gt; per-host limiter + compliance/challenge policy
+       |         +--&gt; content-addressed raw response archive (S3)
+       v
+normalized records + append-only observations --&gt; exports / consumers
+</code></pre>
+<ul>
+<li>Enumerate source APIs, feeds, sitemaps, and bounded archives before crawling broad page spaces. Persist cursors so discovery is resumable.</li>
+<li>Claim work with short leases using <code>SELECT ... FOR UPDATE SKIP LOCKED</code>; workers should be stateless so replicas can be added without shared in-memory queues.</li>
+<li>Decouple discovery, fetching, extraction, and export. Store raw responses by content hash in S3 and keep metadata/status in Postgres.</li>
+<li>Apply per-host concurrency and adaptive rates. Respect provider/source rules; classify a block, escalate only where permitted, then dead-letter.</li>
+<li>Keep deterministic parsing ahead of expensive LLM calls; cache fetches and model results by normalized content hash.</li>
+</ul>
+<p><strong>Theoretical throughput only (not a measured benchmark):</strong></p>
+<p><code>daily items = workers Ã— sustained requests/second/worker Ã— 86,400 Ã— utilization</code></p>
+<p>For illustration, 10 workers Ã— 1 request/second Ã— 86,400 seconds Ã— 1.0 utilization = 864,000 requests/day before retries, source quotas, parse failures, or non-1:1 item/page ratios. This is arithmetic, not a capacity claim; real sustainable throughput is source-policy-limited.</p>
+<p>Cost levers: deterministic-first extraction, batch-friendly APIs (the current arXiv fetcher batches up to 100 IDs and GitHub GraphQL batches 50 repositories), response/result caching, and LLM only for residual ambiguous fields.</p>
+<div class="page-break"></div>
+
+<h2>Page 2 â€” LLM payload and rate-limit handling</h2>
+<p><strong>Implemented in <code>src/llm/budget.py</code>, <code>src/llm/providers.py</code>, and <code>src/llm/orchestrator.py</code>:</strong></p>
+<ul>
+<li>Budget uses <code>min(context_tokens, tpm)</code> as the combined estimated-token ceiling. It reserves 384 output tokens and 96 fixed estimator tokens, leaving at most <code>min(context_tokens, tpm) - 480</code> estimated input units. The input estimate is UTF-8 byte length, not a provider tokenizer. Serialized request bytes are independently limited by <code>max_bytes</code>.</li>
+<li>Truncation keeps a shortened lead line/block first, then ranks remaining lines for pricing signals. A fitting request also has to fit the provider byte cap.</li>
+<li>Initial fitting shrinks the character cap by <code>0.6Ã—</code> when it does not fit. HTTP 413 or recognized context overflow shrinks the excerpt actually sent by <code>0.6Ã—</code>, then retries within the four-attempt provider loop.</li>
+<li><code>ProviderGate</code> maintains a rolling 60-second RPM/TPM window and shared pause per provider <strong>within one <code>LLMGateway</code> instance</strong>. It is not a cross-process/global distributed limiter.</li>
+<li><code>retry_delay</code> applies capped randomized exponential jitter and honors <code>Retry-After</code> seconds or HTTP dates by waiting at least the requested delay. <code>src/core/http.py</code> separately uses full-jitter exponential backoff for source HTTP requests.</li>
+<li>Repeated 429/5xx responses pause that provider gate. A quota-exhausted 429 gets at least a 300-second cooldown for that provider and execution falls through to the next configured provider.</li>
+<li>Every successful completion is schema-validated and passed through evidence grounding. Unsupported/conflicting pricing becomes null. Provider counters include requests, status codes, overflows, fallbacks, invalid output, and ungrounded output.</li>
+</ul>
+<pre><code class="language-text">source text
+    |
+budget + rank/truncate
+    |
+provider RPM/TPM reservation
+    |
+request --&gt; 413/context? --yes--&gt; shrink 0.6x --retry
+    | no
+429/5xx? --yes--&gt; Retry-After/jitter pause --retry or fallback
+    | success
+schema validate --&gt; evidence ground --&gt; accepted result or null
+</code></pre>
+<p><strong>Not implemented:</strong> map-reduce for multi-record pages, provider-specific tokenization, and persistent/distributed rate gates. Pricing is a standalone gateway/demo and is not integrated into product extraction.</p>
+<div class="page-break"></div>
+
+<h2>Page 3 â€” Freshness, exactly-once, and storage</h2>
+<p><strong>Current implementation:</strong> <code>src/core/dates.py</code> parses supported timestamps to UTC uncertainty intervals; strict freshness uses the earliest possible time. <code>src/core/seen_store.py</code> implements URL canonicalization, a whitespace-normalized text fingerprint, SQLite <code>seen</code> claims, and source <code>runs</code> metadata. These helpers are not yet integrated as a complete source watermark pipeline.</p>
+<p><strong>Production design (not in demo):</strong></p>
+<ul>
+<li>Treat uncertain publication dates as <code>[earliest, latest]</code>; strict freshness requires <code>earliest &gt;= now - window</code>. If no date exists, use a per-source top-key watermark heuristic and overlap/reconcile on the next run rather than assigning fetch time as publication time.</li>
+<li>Canonicalize URLs (remove tracking parameters, fragment, <code>www.</code>, and trailing slash) and fingerprint normalized content for dedupe.</li>
+<li>Use Redis <code>SET NX EX</code> as a fast distributed claim path, with a Postgres <code>UNIQUE</code> constraint as the durable exactly-once authority. The demo currently uses SQLite only; it has no cross-node atomicity or TTL.</li>
+<li>Store normalized entities and JSONB source payloads in Postgres. Keep mutable popularity such as GitHub stars in append-only <code>metric_observations</code>, not as overwritten history.</li>
+<li>Store raw HTML/API payloads in S3 by content hash. Use pgvector for entity-resolution embeddings only as a review candidate generator; deterministic domain/name matching remains authoritative.</li>
+<li>Start with relational edge tables for company/product/paper relationships. <strong>Proposed migration trigger:</strong> move graph queries to Neo4j or Apache AGE only if multi-hop traversals exceed 30% of graph-query workload and indexed relational p95 remains above 500 ms for 30 consecutive days. These are proposed operational thresholds, not measured current metrics.</li>
+</ul>
+<p><strong>Explicit demo boundary:</strong> SQLite is implemented in <code>SeenStore</code>; Postgres, Redis, S3, JSONB, append-only metric history, pgvector, graph databases, leases, and the watermark integration are production design, not in this demo.</p>
+</body>
+</html>

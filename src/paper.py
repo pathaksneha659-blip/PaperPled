@@ -3,7 +3,6 @@ import json
 import re
 from datetime import date, datetime, timedelta, timezone
 import xml.etree.ElementTree as ET
-from pathlib import Path
 from src.core.http import HttpClient
 from src.schemas import ResearchPaperRecord, ResearchPaperContent, SourceInfo
 from src.config import settings
@@ -143,7 +142,7 @@ async def run_papers_extractor(http: HttpClient, target_count: int = 1000) -> li
     # Filter papers with valid GitHub repositories
     papers_with_code = []
     repo_tuples = []
-    for aid, p in papers_dict.items():
+    for p in papers_dict.values():
         gh_tuple = clean_github_repo(p.get("github_url"))
         if gh_tuple:
             papers_with_code.append((p, gh_tuple))

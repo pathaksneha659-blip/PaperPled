@@ -1,7 +1,6 @@
-from datetime import datetime
 from enum import Enum
-from typing import Literal, Optional, Any
-from pydantic import BaseModel, HttpUrl, Field
+from typing import Literal, Optional
+from pydantic import BaseModel, Field
 
 class SourceInfo(BaseModel):
     name: str
@@ -35,7 +34,9 @@ class StartupRecord(BaseModel):
 class ProductContent(BaseModel):
     productName: str
     startupName: str
-    pricingModel: PricingModelEnum
+    pricingModel: Optional[PricingModelEnum] = None
+    pricingSourceUrl: Optional[str] = None
+    pricingEvidence: Optional[str] = None
 
 class ProductRecord(BaseModel):
     schemaVersion: str = "1.0"
@@ -58,4 +59,32 @@ class ResearchPaperRecord(BaseModel):
     recordType: Literal["RESEARCH_PAPER"] = "RESEARCH_PAPER"
     source: SourceInfo
     content: ResearchPaperContent
+    collectedAt: str
+
+class JobContent(BaseModel):
+    title: str
+    companyName: str
+    date: str
+    location: Optional[str] = None
+    employmentType: Optional[str] = None
+    description: Optional[str] = None
+
+class JobRecord(BaseModel):
+    schemaVersion: str = "1.0"
+    recordType: Literal["JOB"] = "JOB"
+    source: SourceInfo
+    content: JobContent
+    collectedAt: str
+
+class NewsContent(BaseModel):
+    title: str
+    publisher: Optional[str] = None
+    date: str
+    summary: Optional[str] = None
+
+class NewsRecord(BaseModel):
+    schemaVersion: str = "1.0"
+    recordType: Literal["NEWS"] = "NEWS"
+    source: SourceInfo
+    content: NewsContent
     collectedAt: str
